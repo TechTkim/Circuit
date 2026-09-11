@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>회로 실험실 — 센서 로봇 프로젝트</title>
+<style>
+  :root{
+    --navy:#1B3A6B; --teal:#006D77; --orange:#D05A2A; --green:#2E7D32;
+    --flow:#00A6B4; --ink:#1F2937; --muted:#6B7280; --line:#D5DBE3;
+    --canvas:#EEF2F6; --panel:#FFFFFF; --warn-bg:#FFF3E0; --ok-bg:#E8F5E9;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;color:var(--ink);background:var(--canvas);overflow:hidden}
+  button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+
+  #app{display:grid;grid-template-rows:56px 1fr;grid-template-columns:104px 1fr 300px;height:100%;
+       grid-template-areas:"top top top" "pal cv side"}
+  header{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:17px;margin:0;font-weight:700;color:var(--navy);white-space:nowrap}
+  header h1 small{font-weight:500;color:var(--muted);margin-left:6px;font-size:12px}
+  .tabs{display:flex;gap:4px;margin-left:8px}
+  .tab{padding:7px 12px;border-radius:8px;font-size:14px;color:var(--muted);border:1px solid transparent}
+  .tab.on{background:var(--navy);color:#fff}
+  .spacer{flex:1}
+  .btn{padding:8px 14px;border-radius:8px;font-size:14px;font-weight:600;border:1px solid var(--line);background:#fff;display:inline-flex;align-items:center;gap:6px}
+  .btn.run{background:var(--flow);border-color:var(--flow);color:#fff;min-width:112px;justify-content:center}
+  .btn.run.on{background:var(--orange);border-color:var(--orange)}
+  .btn:active{transform:translateY(1px)}
+
+  aside.pal{grid-area:pal;background:var(--panel);border-right:1px solid var(--line);padding:8px 6px;display:flex;flex-direction:column;gap:6px;overflow:auto}
+  .pal-title{font-size:11px;color:var(--muted);text-align:center;margin:2px 0 4px}
+  .pi{border:1px solid var(--line);border-radius:10px;background:#fff;padding:6px 2px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;user-select:none;touch-action:none}
+  .pi:active{background:#EEF7F8;border-color:var(--teal)}
+  .pi svg{width:72px;height:36px;display:block}
+  .pi span{font-size:12px;font-weight:600;color:var(--navy)}
+
+  main{grid-area:cv;position:relative;overflow:hidden}
+  #stage{width:100%;height:100%;display:block;touch-action:none;
+    background-color:var(--canvas);
+    background-image:radial-gradient(circle,#C9D2DD 1px,transparent 1.2px);
+    background-size:20px 20px}
+  #tools{position:absolute;left:10px;bottom:10px;display:flex;gap:6px}
+  #tools .btn{padding:7px 11px;font-size:13px}
+  #sel-tools{position:absolute;top:10px;left:10px;display:none;gap:6px}
+  #sel-tools.show{display:flex}
+  #hint{position:absolute;right:10px;bottom:10px;font-size:12px;color:var(--muted);background:rgba(255,255,255,.85);padding:6px 10px;border-radius:8px;pointer-events:none}
+
+  aside.side{grid-area:side;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:auto}
+  .task{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+  .task h2{margin:0 0 6px;font-size:15px;color:var(--navy)}
+  .task p{margin:0 0 6px;font-size:13.5px;line-height:1.55}
+  .task .goal{background:#EEF7F8;border-left:3px solid var(--teal);padding:8px 10px;border-radius:0 8px 8px 0;font-size:13.5px;margin:8px 0}
+  .task ol{margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.6}
+  .status{padding:12px 16px;flex:1}
+  .status h3{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600}
+  .msg{border-radius:8px;padding:9px 11px;font-size:13.5px;line-height:1.5;margin-bottom:8px;border:1px solid var(--line);background:#F8FAFC}
+  .msg.ok{background:var(--ok-bg);border-color:#BFE3C4;color:#1B5E20}
+  .msg.warn{background:var(--warn-bg);border-color:#F5CBA7;color:#8A3A10}
+  .msg.info{background:#EEF7F8;border-color:#BFE1E4;color:#0B4F55}
+  .check{margin:8px 16px 14px}
+  .check .btn{width:100%;justify-content:center;background:var(--navy);color:#fff;border-color:var(--navy)}
+
+  /* SVG element styles */
+  .wire{stroke:#1F2937;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .wire.sel{stroke:var(--orange)}
+  .wire-hit{stroke:transparent;stroke-width:18;fill:none}
+  .flow{stroke:var(--flow);stroke-width:4;fill:none;stroke-linecap:round;stroke-dasharray:2 11;animation:flow .6s linear infinite;pointer-events:none}
+  @keyframes flow{to{stroke-dashoffset:-13}}
+  .term{fill:#fff;stroke:#1F2937;stroke-width:2}
+  .term.pend{fill:var(--orange);stroke:var(--orange)}
+  .term-hit{fill:transparent}
+  .body{stroke:#1F2937;stroke-width:2.6;fill:#fff;stroke-linecap:round}
+  .lead{stroke:#1F2937;stroke-width:2.6;stroke-linecap:round}
+  .lbl{font-size:11px;fill:var(--muted);text-anchor:middle;pointer-events:none}
+  .lbl.b{fill:var(--navy);font-weight:700}
+  .selbox{fill:none;stroke:var(--orange);stroke-width:1.5;stroke-dasharray:4 3}
+  .slot{fill:none;stroke:var(--orange);stroke-width:2;stroke-dasharray:6 4}
+  .slot-lbl{font-size:20px;font-weight:700;fill:var(--orange);text-anchor:middle;pointer-events:none}
+  .rotor{transform-origin:center;transform-box:fill-box}
+  .spin-cw{animation:spin .9s linear infinite}
+  .spin-ccw{animation:spin .9s linear infinite reverse}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .ray{stroke:#F4C430;stroke-width:2.5;stroke-linecap:round}
+  .glow{fill:#FFD54F;opacity:.45;filter:blur(6px)}
+  .snd{fill:none;stroke:var(--teal);stroke-width:2;opacity:.8;animation:pulse 1s ease-out infinite}
+  @keyframes pulse{0%{opacity:.9;transform:scale(.8)}100%{opacity:0;transform:scale(1.3)}}
+  .warnmark{font-size:16px;text-anchor:middle}
+
+  @media (prefers-reduced-motion:reduce){.flow,.spin-cw,.spin-ccw,.snd{animation:none}}
+  @media (max-width:900px){
+    #app{grid-template-rows:56px 84px 1fr 220px;grid-template-columns:1fr;grid-template-areas:"top" "pal" "cv" "side"}
+    aside.pal{flex-direction:row;border-right:0;border-bottom:1px solid var(--line);padding:6px 8px}
+    .pi{min-width:78px}
+    aside.side{border-left:0;border-top:1px solid var(--line)}
+    header h1 small{display:none}
+  }
+  #help{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;z-index:9}
+  #help.show{display:flex}
+  #help .card{background:#fff;border-radius:14px;padding:22px 26px;max-width:520px;width:92%;font-size:14px;line-height:1.65}
+  #help h2{margin:0 0 10px;color:var(--navy);font-size:17px}
+  #help ul{margin:0 0 12px 18px;padding:0}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>회로 실험실<small>센서 로봇 프로젝트</small></h1>
+    <nav class="tabs" id="tabs">
+      <button class="tab on" data-mode="free">자유 구성</button>
+      <button class="tab" data-mode="w12" title="학습지1 예제2">1-②</button>
+      <button class="tab" data-mode="w13" title="학습지1 예제3">1-③</button>
+      <button class="tab" data-mode="w14" title="학습지1 예제4">1-④</button>
+      <button class="tab" data-mode="w21" title="학습지2 예제1">2-①</button>
+      <button class="tab" data-mode="w22" title="학습지2 예제2">2-②</button>
+      <button class="tab" data-mode="w23" title="학습지2 예제3">2-③</button>
+      <button class="tab" data-mode="w24" title="학습지2 예제4">2-④</button>
+    </nav>
+    <div class="spacer"></div>
+    <button class="btn" id="helpBtn">사용법</button>
+    <button class="btn" id="resetBtn">초기화</button>
+    <button class="btn run" id="runBtn">▶ 전류 보기</button>
+  </header>
+
+  <aside class="pal" id="pal">
+    <div class="pal-title">부품을 눌러 추가</div>
+  </aside>
+
+  <main>
+    <svg id="stage" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet">
+      <g id="gSlots"></g><g id="gWires"></g><g id="gParts"></g><g id="gFlow"></g><g id="gTop"></g>
+    </svg>
+    <div id="sel-tools">
+      <button class="btn" id="rotBtn">↻ 회전</button>
+      <button class="btn" id="flipBtn">⇄ 뒤집기</button>
+      <button class="btn" id="delBtn">🗑 삭제</button>
+    </div>
+    <div id="tools">
+      <button class="btn" id="clearWiresBtn">전선만 지우기</button>
+    </div>
+    <div id="hint">단자 ○를 누르고 다른 단자를 누르면 전선이 연결됩니다</div>
+  </main>
+
+  <aside class="side">
+    <div class="task" id="taskBox"></div>
+    <div class="status"><h3>회로 상태</h3><div id="statusBox"><div class="msg">부품을 놓고 단자를 연결한 뒤 ▶ 전류 보기를 누르세요.</div></div></div>
+    <div class="check" id="checkBox" style="display:none"><button class="btn" id="checkBtn">정답 확인</button></div>
+  </aside>
+</div>
+
+<div id="help"><div class="card">
+  <h2>사용법</h2>
+  <ul>
+    <li><b>부품 추가</b> — 왼쪽 목록의 부품을 누르면 화면에 나타납니다. 끌어서 옮길 수 있습니다.</li>
+    <li><b>전선 연결</b> — 부품 끝의 단자 ○를 한 번 누르고, 이을 다른 단자를 누르면 전선이 생깁니다.</li>
+    <li><b>스위치·센서 조작</b> — 스위치, 자기 센서, 기울기 센서의 몸통을 누르면 열리고 닫힙니다. 센서는 조건(자석이 가까움·기울어짐)이 되면 스스로 닫히는 스위치입니다.</li>
+    <li><b>선택·회전·뒤집기·삭제</b> — 부품이나 전선을 누르면 선택됩니다. 위쪽 버튼으로 회전(모양만 돌림)·뒤집기(＋−를 바꿈)·삭제할 수 있습니다.</li>
+    <li><b>전류 보기</b> — ▶ 버튼을 누르면 회로가 완성된 곳에 전류가 흐르는 모습이 보입니다. LED 방향(＋ → −)과 저항을 확인하세요.</li>
+  </ul>
+  <button class="btn" onclick="document.getElementById('help').classList.remove('show')">닫기</button>
+</div></div>
+
+<script>
+/* ==================== 데이터 ==================== */
+const PART_DEFS = {
+  battery:{name:'건전지', terms:['+','−']},
+  sw:{name:'스위치', terms:['','']},
+  mag:{name:'자기 센서', terms:['','']},
+  tilt:{name:'기울기 센서', terms:['','']},
+  res:{name:'저항', terms:['','']},
+  led:{name:'LED', terms:['+','−']},
+  motor:{name:'모터', terms:['','']},
+  buzz:{name:'부저', terms:['','']},
+};
+const L = 40;               // 단자 거리(중심에서)
+const SENSORS=new Set(['mag','tilt']);
+let S = newState('free');
+let running=false, audio=null, osc=null;
+
+function newState(mode){
+  return {mode, parts:[], wires:[], slots:[], next:1, sel:null, pend:null};
+}
+function addPart(type,x,y,rot=0,extra={}){
+  const p={id:S.next++, type, x, y, rot, closed:false, pressed:false, ...extra};
+  S.parts.push(p); return p;
+}
+function addWire(a,b){
+  if(a===b) return null;
+  if(termOwner(a)===termOwner(b) && termOwner(a)!=null) return null;
+  if(S.wires.some(w=>(w.a===a&&w.b===b)||(w.a===b&&w.b===a))) return null;
+  const w={id:S.next++, a, b}; S.wires.push(w); return w;
+}
+function addSlot(label,x,y,rot=0){
+  const s={id:S.next++, label, x, y, rot, partId:null}; S.slots.push(s); return s;
+}
+function termOwner(tid){ const m=tid.match(/^p(\d+):/); return m?+m[1]:null; }
+function partById(id){ return S.parts.find(p=>p.id===id); }
+function slotById(id){ return S.slots.find(s=>s.id===id); }
+
+/* 단자 위치 */
+function rotPt(x,y,rot){ const r=rot*Math.PI/180; return {x:x*Math.cos(r)-y*Math.sin(r), y:x*Math.sin(r)+y*Math.cos(r)}; }
+function termPos(tid){
+  let m=tid.match(/^p(\d+):(\d)$/);
+  if(m){ const p=partById(+m[1]); if(!p) return null; const d=rotPt(m[2]==='0'?-L:L,0,p.rot); return {x:p.x+d.x,y:p.y+d.y}; }
+  m=tid.match(/^s(\d+):(\d)$/);
+  if(m){ const s=slotById(+m[1]); if(!s) return null; const d=rotPt(m[2]==='0'?-L:L,0,s.rot); return {x:s.x+d.x,y:s.y+d.y}; }
+  return null;
+}
+function termsOf(p){ return [`p${p.id}:0`,`p${p.id}:1`]; }
+
+/* ==================== 시뮬레이션 ==================== */
+/* 단자 그래프: 전선(무방향) + 부품 내부 간선(LED는 +→− 방향, 열린 스위치는 없음) */
+function simulate(){
+  const R={live:new Set(), lit:new Set(), motorDir:{}, liveTerms:new Set(), level:new Map(), warn:[], short:false, noRes:new Set()};
+  const bat=S.parts.find(p=>p.type==='battery');
+  if(!bat){ return R; }
+  const adjW=new Map(); // 전선 인접
+  const link=(a,b)=>{ if(!adjW.has(a))adjW.set(a,[]); adjW.get(a).push(b); };
+  S.wires.forEach(w=>{link(w.a,w.b);link(w.b,w.a);});
+  const src=`p${bat.id}:0`, sink=`p${bat.id}:1`;
+  function buildInner(ignoreLedDir){
+    const inner=new Map();
+    S.parts.forEach(p=>{
+      if(p.type==='battery') return;
+      if(p.type==='sw' && !p.closed) return;
+      if(SENSORS.has(p.type) && !p.pressed) return;
+      const [t0,t1]=termsOf(p);
+      const push=(a,b,dir)=>{ if(!inner.has(a))inner.set(a,[]); inner.get(a).push({to:b,part:p,dir}); };
+      push(t0,t1,+1);
+      if(p.type!=='led' || ignoreLedDir) push(t1,t0,-1);
+    });
+    return inner;
+  }
+  function enumerate(inner){
+    const paths=[]; const MAXP=300;
+    function dfs(t, visited, comps, terms){
+      if(paths.length>=MAXP) return;
+      if(t===sink){ paths.push({comps:[...comps], terms:[...terms]}); return; }
+      for(const n of (adjW.get(t)||[])){
+        if(visited.has(n)) continue;
+        visited.add(n); terms.push(n); dfs(n,visited,comps,terms); terms.pop(); visited.delete(n);
+      }
+      for(const e of (inner.get(t)||[])){
+        if(visited.has(e.to)) continue;
+        if(comps.some(c=>c.part.id===e.part.id)) continue;
+        visited.add(e.to); comps.push(e); terms.push(e.to); dfs(e.to,visited,comps,terms); terms.pop(); comps.pop(); visited.delete(e.to);
+      }
+    }
+    dfs(src,new Set([src]),[],[src]);
+    return paths;
+  }
+  const inner=buildInner(false);
+  const paths=enumerate(inner);
+  if(!paths.length){
+    // 역방향 LED 감지: LED 방향을 무시하면 경로가 생기는지
+    const undirected=enumerate(buildInner(true));
+    undirected.forEach(pa=>pa.comps.filter(c=>c.part.type==='led'&&c.dir<0).forEach(()=>{ if(!R.warn.length) R.warn.push('LED가 켜지지 않습니다. LED는 ＋에서 −로만 전류가 흐릅니다. LED를 선택하고 ⇄ 뒤집기로 방향을 바꿔 보세요.'); }));
+    return R;
+  }
+  const isLoad=p=>['res','led','motor','buzz'].includes(p.type);
+  // 합선 검사
+  if(paths.some(pa=>!pa.comps.some(c=>isLoad(c.part)))){ R.short=true; R.warn.push('합선! 건전지 ＋에서 −까지 저항 없이 바로 이어졌습니다. 건전지가 뜨거워지고 부품이 작동하지 않습니다.'); return R; }
+  paths.forEach(pa=>{
+    pa.terms.forEach(t=>R.liveTerms.add(t));
+    const hasRes=pa.comps.some(c=>c.part.type==='res');
+    pa.comps.forEach(c=>{
+      R.live.add(c.part.id);
+      if(c.part.type==='motor' && !(c.part.id in R.motorDir)) R.motorDir[c.part.id]=c.dir;
+      if(c.part.type==='led'){ R.lit.add(c.part.id); if(!hasRes) R.noRes.add(c.part.id); }
+    });
+  });
+  // 저항 없는 LED: 모든 경로에 저항이 없을 때만 경고
+  R.noRes.forEach(id=>{
+    const ok=paths.some(pa=>pa.comps.some(c=>c.part.id===id)&&pa.comps.some(c=>c.part.type==='res'));
+    if(ok) R.noRes.delete(id);
+  });
+  // 레벨(BFS) — 전류 방향 표시용
+  const q=[src]; R.level.set(src,0);
+  while(q.length){
+    const t=q.shift(); const lv=R.level.get(t);
+    for(const n of (adjW.get(t)||[])) if(R.liveTerms.has(n)&&!R.level.has(n)){R.level.set(n,lv+1);q.push(n);}
+    for(const e of (inner.get(t)||[])) if(R.live.has(e.part.id)&&R.liveTerms.has(e.to)&&!R.level.has(e.to)){R.level.set(e.to,lv+1);q.push(e.to);}
+  }
+  // 방향이 잘못된 LED 경고: 방향 무시 시에만 경로가 생기는 LED
+  {
+    const und=enumerate(buildInner(true));
+    const revIds=new Set();
+    und.forEach(pa=>pa.comps.forEach(c=>{ if(c.part.type==='led'&&c.dir<0&&!R.lit.has(c.part.id)) revIds.add(c.part.id); }));
+    if(revIds.size) R.warn.push('켜지지 않는 LED가 있습니다. LED는 ＋에서 −로만 전류가 흐릅니다. LED를 선택하고 ⇄ 뒤집기로 방향을 바꿔 보세요.');
+  }
+  R.noRes.forEach(()=>R.warn.push('저항 없이 LED에 전류가 흐릅니다. 큰 전류로 LED가 망가질 수 있어요. 저항을 직렬로 넣으세요.'));
+  return R;
+}
+
+/* ==================== 렌더링 ==================== */
+const svg=document.getElementById('stage');
+const gSlots=document.getElementById('gSlots'), gWires=document.getElementById('gWires'),
+      gParts=document.getElementById('gParts'), gFlow=document.getElementById('gFlow'), gTop=document.getElementById('gTop');
+
+function termCenter(tid){
+  let m=tid.match(/^p(\d+):/); if(m){const p=partById(+m[1]); return p?{x:p.x,y:p.y}:null;}
+  m=tid.match(/^s(\d+):/); if(m){const s=slotById(+m[1]); return s?{x:s.x,y:s.y}:null;}
+  return null;
+}
+/* 단자가 바깥으로 향하는 방향을 고려한 L자 배선: 목표가 뒤쪽이면 세로부터 꺾는다 */
+function wirePoints(ta,tb){
+  const a=termPos(ta), b=termPos(tb); if(!a||!b) return null;
+  const ca=termCenter(ta)||a; const ox=a.x-ca.x, oy=a.y-ca.y; // 바깥 방향
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const behind = (ox*dx+oy*dy) < 0;
+  const horizFirst = Math.abs(ox)>Math.abs(oy) ? !behind : behind;
+  const mid = horizFirst ? {x:b.x,y:a.y} : {x:a.x,y:b.y};
+  return [a,mid,b];
+}
+function ptsPath(pts){ return pts.map((p,i)=>(i?'L':'M')+p.x+' '+p.y).join(' '); }
+function render(){
+  const sim = running ? simulate() : null;
+  // 슬롯
+  gSlots.innerHTML = S.slots.map(s=>{
+    const filled=s.partId!=null;
+    return `<g transform="translate(${s.x},${s.y}) rotate(${s.rot})">
+      ${filled?'':`<rect class="slot" x="-30" y="-24" width="60" height="48" rx="6" data-role="slot" data-id="${s.id}"/>
+      <text class="slot-lbl" y="7">${s.label}</text>`}
+      <circle class="term" data-role="term" data-id="s${s.id}:0" cx="${-L}" cy="0" r="5"/>
+      <circle class="term" data-role="term" data-id="s${s.id}:1" cx="${L}" cy="0" r="5"/>
+      ${filled?'':`<line class="lead" x1="${-L}" y1="0" x2="-30" y2="0"/><line class="lead" x1="30" y1="0" x2="${L}" y2="0"/>`}
+    </g>`;
+  }).join('');
+  // 전선
+  gWires.innerHTML = S.wires.map(w=>{
+    const pts=wirePoints(w.a,w.b); if(!pts) return '';
+    const d=ptsPath(pts);
+    return `<path class="wire-hit" d="${d}" data-role="wire" data-id="${w.id}"/><path class="wire ${S.sel&&S.sel.kind==='wire'&&S.sel.id===w.id?'sel':''}" d="${d}" pointer-events="none"/>`;
+  }).join('');
+  // 부품
+  gParts.innerHTML = S.parts.map(p=>partSVG(p,sim)).join('');
+  // 전류 흐름
+  gFlow.innerHTML = '';
+  if(sim && !sim.short){
+    const segs=[];
+    S.wires.forEach(w=>{
+      if(!sim.liveTerms.has(w.a)||!sim.liveTerms.has(w.b)) return;
+      let pts=wirePoints(w.a,w.b); if(!pts) return;
+      const la=sim.level.get(w.a)??0, lb=sim.level.get(w.b)??0; if(la>lb) pts=[...pts].reverse();
+      const d=ptsPath(pts);
+      segs.push(`<path class="flow" d="${d}"/>`);
+    });
+    S.parts.forEach(p=>{
+      if(p.type==='battery'){ // 내부: − → +
+        const t0=termPos(`p${p.id}:0`), t1=termPos(`p${p.id}:1`);
+        if(sim.liveTerms.has(`p${p.id}:0`)||sim.liveTerms.has(`p${p.id}:1`)) segs.push(`<line class="flow" x1="${t1.x}" y1="${t1.y}" x2="${t0.x}" y2="${t0.y}"/>`);
+        return;
+      }
+      if(!sim.live.has(p.id)) return;
+      let a=`p${p.id}:0`, b=`p${p.id}:1`;
+      if((sim.level.get(a)??0)>(sim.level.get(b)??0)) [a,b]=[b,a];
+      const pa=termPos(a), pb=termPos(b);
+      segs.push(`<line class="flow" x1="${pa.x}" y1="${pa.y}" x2="${pb.x}" y2="${pb.y}"/>`);
+    });
+    gFlow.innerHTML=segs.join('');
+  }
+  // 선택 상자
+  gTop.innerHTML='';
+  if(S.sel&&S.sel.kind==='part'){ const p=partById(S.sel.id); if(p) gTop.innerHTML=`<g transform="translate(${p.x},${p.y}) rotate(${p.rot})"><rect class="selbox" x="-50" y="-34" width="100" height="68" rx="8"/></g>`; }
+  document.getElementById('sel-tools').classList.toggle('show', !!S.sel);
+  document.getElementById('rotBtn').style.display = (S.sel&&S.sel.kind==='part')?'':'none';
+  document.getElementById('flipBtn').style.display = (S.sel&&S.sel.kind==='part')?'':'none';
+  updateStatus(sim);
+  updateSound(sim);
+}
+
+function partSVG(p,sim){
+  const live = sim && sim.live.has(p.id);
+  const lit  = sim && sim.lit.has(p.id);
+  const noRes= sim && sim.noRes.has(p.id);
+  const dir  = sim && sim.motorDir[p.id];
+  let body='';
+  switch(p.type){
+    case 'battery':
+      body=`<line class="lead" x1="${-L}" y1="0" x2="-12" y2="0"/><line class="lead" x1="14" y1="0" x2="${L}" y2="0"/>
+        <line class="body" x1="-12" y1="-16" x2="-12" y2="16"/><line x1="-4" y1="-8" x2="-4" y2="8" stroke="#1F2937" stroke-width="6"/>
+        <line class="body" x1="6" y1="-16" x2="6" y2="16"/><line x1="14" y1="-8" x2="14" y2="8" stroke="#1F2937" stroke-width="6"/>
+        <text class="lbl b" x="-22" y="-20" style="fill:#D32F2F;font-size:15px">+</text><text class="lbl b" x="24" y="-20" style="font-size:15px">−</text>
+        <text class="lbl b" y="34">건전지</text>`; break;
+    case 'sw':
+      body=`<line class="lead" x1="${-L}" y1="0" x2="-16" y2="0"/><line class="lead" x1="16" y1="0" x2="${L}" y2="0"/>
+        <circle cx="-16" cy="0" r="3.5" fill="#1F2937"/><circle cx="16" cy="0" r="3.5" fill="#1F2937"/>
+        <line class="body" x1="-16" y1="0" x2="${p.closed?16:12}" y2="${p.closed?0:-18}" style="stroke:${p.closed?'#2E7D32':'#D05A2A'};stroke-width:3.2"/>
+        <rect x="-26" y="-26" width="52" height="40" fill="transparent" data-role="toggle" data-id="${p.id}"/>
+        <text class="lbl b" y="34">스위치 ${p.closed?'(닫힘)':'(열림)'}</text>`; break;
+    case 'mag': case 'tilt': {
+      const on=p.pressed, isMag=p.type==='mag';
+      const name = isMag ? `자기 센서 ${on?'(자석 가까움)':'(자석 멂)'}` : `기울기 센서 ${on?'(기울어짐)':'(바로 섬)'}`;
+      body=`<line class="lead" x1="${-L}" y1="0" x2="-16" y2="0"/><line class="lead" x1="16" y1="0" x2="${L}" y2="0"/>
+        <circle cx="-16" cy="0" r="3.5" fill="#1F2937"/><circle cx="16" cy="0" r="3.5" fill="#1F2937"/>
+        <line class="body" x1="-16" y1="0" x2="${on?16:12}" y2="${on?0:-18}" style="stroke:${on?'#2E7D32':'#D05A2A'};stroke-width:3.2"/>
+        ${isMag?`<rect x="-8" y="-34" width="16" height="9" rx="2" fill="#D32F2F"/><rect x="-8" y="-34" width="8" height="9" rx="2" fill="#1B3A6B"/>`:`<circle cx="6" cy="-28" r="5" fill="${on?'#2E7D32':'#D05A2A'}"/>`}
+        <rect x="-26" y="-38" width="52" height="52" fill="transparent" data-role="toggle" data-id="${p.id}"/>
+        <text class="lbl b" y="34">${name}</text>`; break; }
+    case 'res':
+      body=`<line class="lead" x1="${-L}" y1="0" x2="-22" y2="0"/><line class="lead" x1="22" y1="0" x2="${L}" y2="0"/>
+        <polyline class="body" points="-22,0 -18.3,-8 -11,8 -3.7,-8 3.7,8 11,-8 18.3,8 22,0" fill="none" stroke-linejoin="round"/>
+        <text class="lbl b" y="30">저항</text>`; break;
+    case 'led':{
+      const col = lit ? '#FF5252' : '#E57373';
+      body=`${lit?`<circle class="glow" cx="0" cy="0" r="22"/>`:''}
+        <line class="lead" x1="${-L}" y1="0" x2="-12" y2="0"/><line class="lead" x1="12" y1="0" x2="${L}" y2="0"/>
+        <polygon points="-12,-13 -12,13 10,0" fill="${col}" stroke="#1F2937" stroke-width="2"/>
+        <line x1="10" y1="-13" x2="10" y2="13" stroke="#1F2937" stroke-width="3.5"/>
+        ${lit?`<line class="ray" x1="2" y1="-18" x2="10" y2="-28"/><line class="ray" x1="10" y1="-18" x2="18" y2="-28"/>`:''}
+        ${noRes?`<text class="warnmark" x="0" y="-32">⚠️</text>`:''}
+        <text class="lbl b" x="-24" y="-18" style="fill:#D32F2F">+</text><text class="lbl b" x="24" y="-18">−</text>
+        <text class="lbl b" y="32">LED</text>`; break; }
+    case 'motor':
+      body=`<line class="lead" x1="${-L}" y1="0" x2="-20" y2="0"/><line class="lead" x1="20" y1="0" x2="${L}" y2="0"/>
+        <circle class="body" cx="0" cy="0" r="20" style="fill:${live?'#E8F5E9':'#fff'}"/>
+        <g class="rotor ${live?(dir>0?'spin-cw':'spin-ccw'):''}"><line x1="-11" y1="0" x2="11" y2="0" stroke="#1B3A6B" stroke-width="3"/><line x1="0" y1="-11" x2="0" y2="11" stroke="#1B3A6B" stroke-width="3"/><circle r="3.5" fill="#1B3A6B"/></g>
+        <text class="lbl b" y="36">모터${live?(dir>0?' ↻':' ↺'):''}</text>`; break;
+    case 'buzz':
+      body=`<line class="lead" x1="${-L}" y1="0" x2="-18" y2="0"/><line class="lead" x1="18" y1="0" x2="${L}" y2="0"/>
+        <circle class="body" cx="0" cy="0" r="18" style="fill:${live?'#EEF7F8':'#fff'}"/>
+        <text x="0" y="6" text-anchor="middle" font-size="17" font-weight="700" fill="#006D77">♪</text>
+        ${live?`<circle class="snd" r="24"/><circle class="snd" r="30" style="animation-delay:.3s"/>`:''}
+        <text class="lbl b" y="36">부저${live?' ♪♪':''}</text>`; break;
+  }
+  const pendA = S.pend===`p${p.id}:0`, pendB = S.pend===`p${p.id}:1`;
+  return `<g transform="translate(${p.x},${p.y}) rotate(${p.rot})">
+    <rect x="-44" y="-30" width="88" height="60" fill="transparent" data-role="part" data-id="${p.id}"/>
+    ${body}
+    <circle class="term-hit" data-role="term" data-id="p${p.id}:0" cx="${-L}" cy="0" r="16"/>
+    <circle class="term-hit" data-role="term" data-id="p${p.id}:1" cx="${L}" cy="0" r="16"/>
+    <circle class="term ${pendA?'pend':''}" cx="${-L}" cy="0" r="5" pointer-events="none"/>
+    <circle class="term ${pendB?'pend':''}" cx="${L}" cy="0" r="5" pointer-events="none"/>
+  </g>`;
+}
+
+/* 상태 패널 */
+function updateStatus(sim){
+  const box=document.getElementById('statusBox');
+  if(!running){ box.innerHTML='<div class="msg">▶ 전류 보기를 누르면 회로 상태를 확인할 수 있습니다.</div>'; return; }
+  const parts=[];
+  if(!S.parts.some(p=>p.type==='battery')) parts.push('<div class="msg warn">건전지가 없습니다. 전원이 있어야 전류가 흐릅니다.</div>');
+  else if(sim.short) parts.push(`<div class="msg warn">${sim.warn[0]}</div>`);
+  else if(!sim.live.size){ if(sim.warn.length) sim.warn.forEach(w=>parts.push(`<div class="msg warn">${w}</div>`)); else parts.push('<div class="msg">아직 완성된 회로가 없습니다. 건전지 ＋에서 출발해 부품을 거쳐 −까지 한 바퀴 이어져야 하고, 스위치는 닫혀 있어야 합니다.</div>'); }
+  else{
+    const names=[];
+    S.parts.forEach(p=>{
+      if(p.type==='led'&&sim.lit.has(p.id)) names.push('LED 켜짐');
+      else if(p.type==='motor'&&sim.live.has(p.id)) names.push('모터 회전');
+      else if(p.type==='buzz'&&sim.live.has(p.id)) names.push('부저 울림');
+    });
+    parts.push(`<div class="msg ok">전류가 흐릅니다 — ${names.length?names.join(', '):'저항에만 전류가 흐릅니다'}</div>`);
+    sim.warn.forEach(w=>parts.push(`<div class="msg warn">${w}</div>`));
+  }
+  box.innerHTML=parts.join('');
+}
+/* 부저 소리 — iOS(iPad Safari)는 사용자 터치 안에서 오디오를 깨워야 소리가 남 */
+function unlockAudio(){
+  if(!audio){ try{ audio=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; } }
+  if(audio.state==='suspended'){ try{ audio.resume(); }catch(e){} }
+}
+function updateSound(sim){
+  const on = running && sim && !sim.short && S.parts.some(p=>p.type==='buzz'&&sim.live.has(p.id));
+  if(on){ unlockAudio();
+    if(audio&&audio.state==='running'&&!osc){
+      osc=audio.createOscillator(); const g=audio.createGain();
+      osc.type='square'; osc.frequency.value=880; osc.connect(g); g.connect(audio.destination);
+      const lfo=audio.createOscillator(), lg=audio.createGain();   // 삐-삐-삐 펄스
+      lfo.type='square'; lfo.frequency.value=5; lg.gain.value=.045;
+      g.gain.value=.045; lfo.connect(lg); lg.connect(g.gain);
+      osc.start(); lfo.start(); osc._g=g; osc._lfo=lfo; } }
+  else if(osc){ try{ osc.stop(); if(osc._lfo) osc._lfo.stop(); }catch(e){} osc=null; }
+}
+
+/* ==================== 입력 ==================== */
+function svgPt(e){ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); }
+let drag=null;
+svg.addEventListener('pointerdown',e=>{
+  unlockAudio();
+  const el=e.target.closest('[data-role]'); const pt=svgPt(e);
+  if(!el){ S.sel=null; S.pend=null; render(); return; }
+  const role=el.dataset.role, id=el.dataset.id;
+  if(role==='term'){
+    if(S.pend==null){ S.pend=id; }
+    else if(S.pend===id){ S.pend=null; }
+    else { addWire(S.pend,id); S.pend=null; }
+    S.sel=null; render(); return;
+  }
+  if(role==='wire'){ S.sel={kind:'wire',id:+id}; S.pend=null; render(); return; }
+  if(role==='part'||role==='toggle'){
+    const p=partById(+id); svg.setPointerCapture(e.pointerId);
+    drag={p, dx:pt.x-p.x, dy:pt.y-p.y, sx:pt.x, sy:pt.y, moved:false, toggle:role==='toggle'};
+    return;
+  }
+});
+svg.addEventListener('pointermove',e=>{
+  if(!drag) return; const pt=svgPt(e);
+  if(!drag.moved && Math.hypot(pt.x-drag.sx,pt.y-drag.sy)<5) return;
+  drag.moved=true;
+  drag.p.x=Math.round((pt.x-drag.dx)/10)*10; drag.p.y=Math.round((pt.y-drag.dy)/10)*10;
+  // 슬롯에서 빠져나오면 해제
+  const s=S.slots.find(s=>s.partId===drag.p.id);
+  if(s && Math.hypot(drag.p.x-s.x,drag.p.y-s.y)>30){ detachSlot(s); }
+  render();
+});
+svg.addEventListener('pointerup',e=>{
+  if(!drag) return; const d=drag; drag=null;
+  if(!d.moved){
+    if(d.toggle){ if(d.p.type==='sw') d.p.closed=!d.p.closed; if(SENSORS.has(d.p.type)) d.p.pressed=!d.p.pressed; S.sel={kind:'part',id:d.p.id}; }
+    else { S.sel = (S.sel&&S.sel.kind==='part'&&S.sel.id===d.p.id) ? null : {kind:'part',id:d.p.id}; }
+    S.pend=null;
+  } else {
+    // 슬롯 스냅
+    const s=S.slots.find(s=>s.partId==null && Math.hypot(d.p.x-s.x,d.p.y-s.y)<34);
+    if(s) attachSlot(s,d.p);
+  }
+  render();
+});
+function attachSlot(s,p){
+  s.partId=p.id; p.x=s.x; p.y=s.y; p.rot=s.rot;
+  addWire(`s${s.id}:0`,`p${p.id}:0`); addWire(`s${s.id}:1`,`p${p.id}:1`);
+}
+function detachSlot(s){
+  const pid=s.partId; s.partId=null;
+  S.wires=S.wires.filter(w=>!((w.a===`s${s.id}:0`||w.a===`s${s.id}:1`)&&termOwner(w.b)===pid)&&!((w.b===`s${s.id}:0`||w.b===`s${s.id}:1`)&&termOwner(w.a)===pid));
+}
+document.getElementById('delBtn').onclick=()=>{
+  if(!S.sel) return;
+  if(S.sel.kind==='wire') S.wires=S.wires.filter(w=>w.id!==S.sel.id);
+  else { const pid=S.sel.id; const s=S.slots.find(s=>s.partId===pid); if(s) detachSlot(s);
+    S.parts=S.parts.filter(p=>p.id!==pid); S.wires=S.wires.filter(w=>termOwner(w.a)!==pid&&termOwner(w.b)!==pid); }
+  S.sel=null; render();
+};
+document.getElementById('rotBtn').onclick=()=>{ if(S.sel&&S.sel.kind==='part'){ const p=partById(S.sel.id); const s=S.slots.find(s=>s.partId===p.id); if(s){ detachSlot(s);} p.rot=(p.rot+90)%360; if(s) attachSlot(s,p); render(); } };
+document.getElementById('flipBtn').onclick=()=>{ if(!(S.sel&&S.sel.kind==='part')) return; const pid=S.sel.id, a=`p${pid}:0`, b=`p${pid}:1`;
+  S.wires.forEach(w=>{ if(w.a===a) w.a=b; else if(w.a===b) w.a=a; if(w.b===a) w.b=b; else if(w.b===b) w.b=a; }); render(); };
+document.getElementById('clearWiresBtn').onclick=()=>{ S.wires=[]; S.slots.forEach(s=>s.partId=null); S.sel=null;S.pend=null; render(); };
+document.getElementById('runBtn').onclick=()=>{ unlockAudio(); running=!running; const b=document.getElementById('runBtn'); b.textContent=running?'■ 정지':'▶ 전류 보기'; b.classList.toggle('on',running); render(); };
+document.getElementById('resetBtn').onclick=()=>{ loadMode(S.mode); };
+document.getElementById('helpBtn').onclick=()=>document.getElementById('help').classList.add('show');
+document.getElementById('tabs').addEventListener('click',e=>{ const t=e.target.closest('.tab'); if(!t) return; loadMode(t.dataset.mode); });
+
+/* 팔레트 */
+(function buildPalette(){
+  const pal=document.getElementById('pal');
+  Object.entries(PART_DEFS).forEach(([type,def])=>{
+    const tmp={id:0,type,x:0,y:0,rot:0,closed:false,pressed:false};
+    const div=document.createElement('button'); div.className='pi';
+    div.innerHTML=`<svg viewBox="-48 -30 96 50">${partSVG(tmp,null).replace(/<text class="lbl b"[^>]*>[^<]*<\/text>/g,'').replace(/data-role="[^"]*"/g,'')}</svg><span>${def.name}</span>`;
+    div.addEventListener('pointerdown',e=>{ e.preventDefault(); const n=S.parts.length; addPart(type, 300+(n%5)*70, 140+Math.floor(n/5)*60); S.sel={kind:'part',id:S.next-1}; render(); });
+    pal.appendChild(div);
+  });
+})();
+
+/* ==================== 과제 ==================== */
+const TASKS={
+  free:{ title:'자유 구성', html:`<p>부품을 자유롭게 놓고 연결해 보세요. 건전지 ＋에서 출발해 부품을 거쳐 −로 돌아오는 한 바퀴가 완성되면 전류가 흐릅니다.</p><ol><li>스위치를 열고 닫으며 전류가 끊기는 것 보기</li><li>LED를 ⇄ 뒤집어 방향(＋→−) 확인</li><li>저항 없이 LED를 연결하면 어떤 경고가 뜨는지 보기</li><li>갈래를 두 개 만들어 병렬 회로 실험</li></ol>`, build(){}, check:null },
+  w12:{ title:'학습지 1 · 예제 2  직렬 회로 완성', html:`<div class="goal">책상 스탠드: 스위치를 켜면 LED가 켜진다. 빈칸 ㉠·㉡에 알맞은 부품을 끌어다 놓으세요.</div><ol><li>㉠은 불을 켜고 끄는 부품</li><li>㉡은 빛을 내는 부품 (방향 ＋→− 확인)</li><li>▶ 전류 보기 → 스위치를 눌러 켜고 끄기</li><li>저항을 빼면 어떻게 되는지도 실험</li></ol>`,
+    build(){ const bat=addPart('battery',500,470,0), rs=addPart('res',500,150,0); const a=addSlot('㉠',300,150,0), b=addSlot('㉡',700,150,0);
+      addWire(`p${bat.id}:0`,`s${a.id}:0`); addWire(`s${a.id}:1`,`p${rs.id}:0`); addWire(`p${rs.id}:1`,`s${b.id}:0`); addWire(`s${b.id}:1`,`p${bat.id}:1`); },
+    check(){ return checkSpec({slots:{'㉠':'sw','㉡':'led'}, required:['battery','sw','res','led'],
+      scenarios:[{set:{sw:true}, expect:{led:true}, needRes:'led'}],
+      ok:'정답! ㉠ 스위치, ㉡ LED입니다. 건전지 ＋ → 스위치 → 저항 → LED → − 로 전류가 흘러 LED가 켜집니다.'}); } },
+  w13:{ title:'학습지 1 · 예제 3  자동문 알림등', html:`<div class="goal">문이 열려 자석이 멀어지면 <b>자기 센서</b>가 닫혀 LED가 켜지는 회로를 직접 만드세요.</div><p>부품: 건전지 · 자기 센서 · 저항 · LED</p><ol><li>입력(자기 센서) → 조절(저항) → 출력(LED) 순서로 연결</li><li>자기 센서를 눌러 상태를 바꿔 보기</li><li>▶ 전류 보기로 확인</li></ol>`,
+    build(){ addPart('battery',500,480,0); },
+    check(){ return checkSpec({required:['battery','mag','res','led'],
+      scenarios:[{set:{mag:false}, expect:{led:false}},{set:{mag:true}, expect:{led:true}, needRes:'led'}],
+      ok:'정답! 자기 센서가 닫히면 건전지 ＋ → 자기 센서 → 저항 → LED → − 로 전류가 흘러 LED가 켜집니다. 학습지 예제 3의 빈칸을 채워 보세요.'}); } },
+  w14:{ title:'학습지 1 · 예제 4  고장 난 회로 수리', html:`<div class="goal">복도 조명: 스위치를 켜면 LED가 켜져야 하는데, 이 회로는 작동하지 않고 위험하기까지 합니다. <b>잘못된 곳 3군데</b>를 찾아 고치세요.</div><ol><li>부품·전선을 눌러 선택 → 🗑 삭제 / ⇄ 뒤집기 활용</li><li>부품판에서 빠진 부품을 추가</li><li>고칠 때마다 <b>정답 확인</b>을 눌러 힌트 받기</li><li>다 고치면 ▶ 전류 보기로 스위치를 켜 보기</li></ol>`,
+    build(){ const bat=addPart('battery',500,480,0), sw=addPart('sw',230,150,0), led=addPart('led',720,150,0);
+      addWire(`p${bat.id}:0`,`p${sw.id}:0`);
+      addWire(`p${sw.id}:1`,`p${led.id}:1`);
+      addWire(`p${led.id}:0`,`p${bat.id}:1`);
+      addWire(`p${sw.id}:1`,`p${bat.id}:1`); },
+    check(){ return checkSpec({required:['battery','sw','res','led'],
+      scenarios:[{set:{sw:false}, expect:{led:false}},{set:{sw:true}, expect:{led:true}, needRes:'led'}],
+      ok:'수리 완료! 세 가지 오류(지름길 전선 = 합선 · LED 역방향 · 저항 없음)를 모두 고쳤습니다. 학습지 예제 4에 오류와 고친 방법을 쓰세요.'}); } },
+  w21:{ title:'학습지 2 · 예제 1  직렬과 병렬 비교', html:`<div class="goal">왼쪽은 직렬, 오른쪽은 병렬 회로입니다. 스위치를 열고 닫으며 무엇이 꺼지는지 관찰하세요.</div><ol><li>▶ 전류 보기</li><li>직렬: S를 열면 LED·부저가 어떻게 되나?</li><li>병렬: S1만 열면? S2만 열면?</li><li>관찰 결과를 학습지 예제 1에 쓰기</li></ol>`,
+    build(){
+      const b1=addPart('battery',250,470,0), s1=addPart('sw',110,140,0), l1=addPart('led',250,140,0), z1=addPart('buzz',390,140,0);
+      addWire(`p${b1.id}:0`,`p${s1.id}:0`); addWire(`p${s1.id}:1`,`p${l1.id}:0`); addWire(`p${l1.id}:1`,`p${z1.id}:0`); addWire(`p${z1.id}:1`,`p${b1.id}:1`);
+      const b2=addPart('battery',750,470,0), sa=addPart('sw',620,130,0), la=addPart('led',880,130,0), sb=addPart('sw',620,290,0), zb=addPart('buzz',880,290,0);
+      addWire(`p${b2.id}:0`,`p${sa.id}:0`); addWire(`p${sa.id}:1`,`p${la.id}:0`); addWire(`p${la.id}:1`,`p${b2.id}:1`);
+      addWire(`p${b2.id}:0`,`p${sb.id}:0`); addWire(`p${sb.id}:1`,`p${zb.id}:0`); addWire(`p${zb.id}:1`,`p${b2.id}:1`);
+    }, check:null },
+  w22:{ title:'학습지 2 · 예제 2  병렬 회로 완성', html:`<div class="goal">책상 위 장치: 스위치를 켜면 조명(LED)이 켜지고, 컵이 기울어지면 부저가 울린다. 빈칸 ㉠~㉣에 알맞은 부품을 끌어다 놓으세요.</div><ol><li>갈래 A: ㉠(켜고 끄는 부품) → 저항 → ㉡(빛)</li><li>갈래 B: ㉢(기울어짐 감지) → ㉣(소리)</li><li>스위치와 센서를 따로따로 눌러 보기</li></ol>`,
+    build(){ const bat=addPart('battery',500,520,0), rs=addPart('res',500,130,0);
+      const a=addSlot('㉠',300,130,0), b=addSlot('㉡',700,130,0), c=addSlot('㉢',380,300,0), d=addSlot('㉣',640,300,0);
+      addWire(`p${bat.id}:0`,`s${a.id}:0`); addWire(`s${a.id}:1`,`p${rs.id}:0`); addWire(`p${rs.id}:1`,`s${b.id}:0`); addWire(`s${b.id}:1`,`p${bat.id}:1`);
+      addWire(`p${bat.id}:0`,`s${c.id}:0`); addWire(`s${c.id}:1`,`s${d.id}:0`); addWire(`s${d.id}:1`,`p${bat.id}:1`); },
+    check(){ return checkSpec({slots:{'㉠':'sw','㉡':'led','㉢':'tilt','㉣':'buzz'}, required:['battery','sw','res','led','tilt','buzz'],
+      scenarios:[{set:{sw:true,tilt:false}, expect:{led:true,buzz:false}, needRes:'led'},{set:{sw:false,tilt:true}, expect:{led:false,buzz:true}}],
+      ok:'정답! ㉠ 스위치, ㉡ LED, ㉢ 기울기 센서, ㉣ 부저입니다. 두 갈래가 병렬이라 조명과 경고음이 따로 작동합니다.'}); } },
+  w23:{ title:'학습지 2 · 예제 3  병렬 회로 설계', html:`<div class="goal">보관함 장치: 뚜껑이 기울어져 열리면 부저가 울리고, 스위치를 켜면 LED가 켜진다. <b>두 기능이 따로</b> 작동하도록 처음부터 만드세요.</div><ol><li>필요한 부품만 고르기 (학습지 (1))</li><li>건전지에 갈래 두 개를 병렬로</li><li>LED 갈래에는 저항 넣기</li><li>한쪽만 켜도 다른 쪽이 영향을 받지 않는지 확인</li></ol>`,
+    build(){ addPart('battery',500,520,0); },
+    check(){ return checkSpec({required:['battery','sw','tilt','res','led','buzz'], forbidden:['mag','motor'],
+      scenarios:[{set:{sw:true,tilt:false}, expect:{led:true,buzz:false}, needRes:'led'},{set:{sw:false,tilt:true}, expect:{led:false,buzz:true}}],
+      ok:'정답! 스위치 갈래와 기울기 센서 갈래가 병렬로 독립되어 있습니다. 직렬로 이었다면 둘 다 켜야만 작동했을 것입니다.'}); } },
+  w24:{ title:'학습지 2 · 예제 4  회로 탐정 — 거꾸로 읽기', html:`<div class="goal">자전거 보관소 장치의 <b>완성된 회로</b>입니다. 회로를 읽고 어떤 장치인지 알아내세요.</div><ol><li>▶ 전류 보기를 켜고 자기 센서·기울기 센서를 눌러 보기</li><li>갈래 A·B가 각각 언제, 무엇을 하는지 학습지 (1)(2)에 쓰기</li><li><b>도전:</b> \u201C문은 닫힘 + 자전거만 넘어짐\u201D 상황을 만들고 정답 확인 누르기</li><li>장치에 어울리는 이름 짓기 (4)</li></ol>`,
+    build(){ const bat=addPart('battery',500,520,0);
+      const mg=addPart('mag',250,130,0), rs=addPart('res',500,130,0), ld=addPart('led',750,130,0);
+      const tl=addPart('tilt',330,300,0), bz=addPart('buzz',670,300,0);
+      addWire(`p${bat.id}:0`,`p${mg.id}:0`); addWire(`p${mg.id}:1`,`p${rs.id}:0`); addWire(`p${rs.id}:1`,`p${ld.id}:0`); addWire(`p${ld.id}:1`,`p${bat.id}:1`);
+      addWire(`p${bat.id}:0`,`p${tl.id}:0`); addWire(`p${tl.id}:1`,`p${bz.id}:0`); addWire(`p${bz.id}:1`,`p${bat.id}:1`); },
+    check(){ const mg=S.parts.find(p=>p.type==='mag'), tl=S.parts.find(p=>p.type==='tilt');
+      if(!(mg&&tl)) return {ok:false,msg:'센서가 없습니다. 초기화를 눌러 원래 회로로 되돌린 뒤 다시 해 보세요.'};
+      if(mg.pressed||!tl.pressed) return {ok:false,msg:'아직 상황이 만들어지지 않았습니다. 자기 센서는 평상시(문 닫힘), 기울기 센서는 작동(넘어짐) 상태로 바꾼 뒤 확인을 누르세요.'};
+      const r=simulate();
+      if(r.short) return {ok:false,msg:'합선이 생겼습니다. 초기화를 눌러 원래 회로로 되돌려 보세요.'};
+      const ld=S.parts.find(p=>p.type==='led'), bz=S.parts.find(p=>p.type==='buzz');
+      const ledOn=ld?r.lit.has(ld.id):false, bzOn=bz?r.live.has(bz.id):false;
+      if(bzOn&&!ledOn) return {ok:true,msg:'정답 확인! 문이 닫혀 있어 갈래 A(LED)는 꺼져 있지만, 갈래 B의 기울기 센서가 닫혀 부저만 울립니다. 병렬 = 갈래마다 독립! 이 이유를 학습지 (3)에 쓰세요.'};
+      return {ok:false,msg:'회로가 바뀐 것 같습니다. 초기화를 눌러 원래 회로로 되돌린 뒤 다시 관찰해 보세요.'}; } },
+};
+const NAMES={battery:'건전지',sw:'스위치',mag:'자기 센서',tilt:'기울기 센서',res:'저항',led:'LED',motor:'모터',buzz:'부저'};
+/* 공통 판정: 부품 존재 → 슬롯 내용 → 시나리오별 동작 */
+function checkSpec(spec){
+  const has=t=>S.parts.some(p=>p.type===t);
+  if(spec.slots){ for(const [lb,ty] of Object.entries(spec.slots)){ const s=S.slots.find(s=>s.label===lb); const p=s&&s.partId!=null?partById(s.partId):null;
+    if(!p) return {ok:false,msg:`빈칸 ${lb}이 비어 있습니다. 알맞은 부품을 끌어다 놓으세요.`};
+    if(p.type!==ty) return {ok:false,msg:`빈칸 ${lb}의 ${NAMES[p.type]}은(는) 맞지 않습니다. ${lb}이 하는 일을 다시 생각해 보세요.`}; } }
+  for(const t of (spec.required||[])) if(!has(t)) return {ok:false,msg:`${NAMES[t]}이(가) 없습니다. 이 장치에 왜 필요한지 생각해 보세요.`};
+  for(const t of (spec.forbidden||[])) if(has(t)) return {ok:false,msg:`${NAMES[t]}은(는) 이 장치에 필요 없는 부품입니다. 기능을 다시 읽어 보세요.`};
+  const save=S.parts.map(p=>[p.closed,p.pressed]);
+  try{
+    for(const sc of spec.scenarios){
+      S.parts.forEach(p=>{ if(p.type==='sw') p.closed = sc.set.sw!==undefined? sc.set.sw : true; if(SENSORS.has(p.type)&&sc.set[p.type]!==undefined) p.pressed=sc.set[p.type]; });
+      const r=simulate();
+      if(r.short) return {ok:false,msg:'합선이 있습니다. 건전지 ＋에서 −까지 부품 없이 바로 이어진 곳을 찾아보세요.'};
+      const st=Object.entries(sc.set).map(([k,v])=>`${NAMES[k]} ${k==='sw'?(v?'닫힘':'열림'):(v?'작동':'평상시')}`).join(', ');
+      for(const [t,exp] of Object.entries(sc.expect)){
+        const p=S.parts.find(p=>p.type===t); const on = t==='led'? r.lit.has(p.id) : r.live.has(p.id);
+        if(on!==exp) return {ok:false,msg:`${st}일 때 ${NAMES[t]}이(가) ${exp?'작동해야':'꺼져 있어야'} 하는데 ${on?'작동합니다':'작동하지 않습니다'}. 연결과 방향을 확인하세요.`};
+      }
+      if(sc.needRes){ const p=S.parts.find(p=>p.type===sc.needRes); if(p&&r.noRes.has(p.id)) return {ok:false,msg:`${NAMES[sc.needRes]}에 저항이 없습니다. 큰 전류로 망가질 수 있으니 저항을 직렬로 넣으세요.`}; }
+    }
+  } finally { S.parts.forEach((p,i)=>{[p.closed,p.pressed]=save[i];}); }
+  return {ok:true,msg:spec.ok};
+}
+function loadMode(mode){
+  running=false; const b=document.getElementById('runBtn'); b.textContent='▶ 전류 보기'; b.classList.remove('on');
+  S=newState(mode); TASKS[mode].build();
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.mode===mode));
+  document.getElementById('taskBox').innerHTML=`<h2>${TASKS[mode].title}</h2>${TASKS[mode].html}`;
+  document.getElementById('checkBox').style.display=TASKS[mode].check?'':'none';
+  render();
+}
+document.getElementById('checkBtn').onclick=()=>{
+  const t=TASKS[S.mode]; if(!t.check) return;
+  const wasRunning=running; running=true; const r=t.check(); running=wasRunning;
+  const box=document.getElementById('statusBox');
+  box.innerHTML=`<div class="msg ${r.ok?'ok':'warn'}">${r.msg}</div>`+box.innerHTML;
+};
+loadMode('free');
+</script>
+</body>
+</html>
