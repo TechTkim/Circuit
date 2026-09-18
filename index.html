@@ -154,7 +154,7 @@
     <li><b>부품 추가</b> — 왼쪽 목록의 부품을 누르면 화면에 나타납니다. 끌어서 옮길 수 있습니다.</li>
     <li><b>전선 연결</b> — 부품 끝의 단자 ○를 한 번 누르고, 이을 다른 단자를 누르면 전선이 생깁니다.</li>
     <li><b>스위치·센서 조작</b> — 스위치, 자기 센서, 기울기 센서의 몸통을 누르면 열리고 닫힙니다. 센서는 조건(자석이 가까움·기울어짐)이 되면 스스로 닫히는 스위치입니다.</li>
-    <li><b>선택·회전·뒤집기·삭제</b> — 부품이나 전선을 누르면 선택됩니다. 위쪽 버튼으로 회전(모양만 돌림)·뒤집기(＋−를 바꿈)·삭제할 수 있습니다.</li>
+    <li><b>선택·회전·뒤집기·삭제</b> — 부품이나 전선을 누르면 선택됩니다. 위쪽 버튼으로 회전(모양만 돌림)·삭제할 수 있습니다. LED와 건전지를 선택하면 <b>⇄ 뒤집기</b>가 나타나 기호가 좌우로 뒤집히고 ＋−(극성)도 반대가 됩니다.</li>
     <li><b>전류 보기</b> — ▶ 버튼을 누르면 회로가 완성된 곳에 전류가 흐르는 모습이 보입니다. LED 방향(＋ → −)과 저항을 확인하세요.</li>
   </ul>
   <button class="btn" onclick="document.getElementById('help').classList.remove('show')">닫기</button>
@@ -217,14 +217,15 @@ function simulate(){
   const adjW=new Map(); // 전선 인접
   const link=(a,b)=>{ if(!adjW.has(a))adjW.set(a,[]); adjW.get(a).push(b); };
   S.wires.forEach(w=>{link(w.a,w.b);link(w.b,w.a);});
-  const src=`p${bat.id}:0`, sink=`p${bat.id}:1`;
+  const src=bat.flip?`p${bat.id}:1`:`p${bat.id}:0`, sink=bat.flip?`p${bat.id}:0`:`p${bat.id}:1`;
   function buildInner(ignoreLedDir){
     const inner=new Map();
     S.parts.forEach(p=>{
       if(p.type==='battery') return;
       if(p.type==='sw' && !p.closed) return;
       if(SENSORS.has(p.type) && !p.pressed) return;
-      const [t0,t1]=termsOf(p);
+      let [t0,t1]=termsOf(p);
+      if(p.flip) { const t=t0; t0=t1; t1=t; }   // 뒤집기: 내부 극성도 반대로
       const push=(a,b,dir)=>{ if(!inner.has(a))inner.set(a,[]); inner.get(a).push({to:b,part:p,dir}); };
       push(t0,t1,+1);
       if(p.type!=='led' || ignoreLedDir) push(t1,t0,-1);
@@ -364,7 +365,7 @@ function render(){
   if(S.sel&&S.sel.kind==='part'){ const p=partById(S.sel.id); if(p) gTop.innerHTML=`<g transform="translate(${p.x},${p.y}) rotate(${p.rot})"><rect class="selbox" x="-50" y="-34" width="100" height="68" rx="8"/></g>`; }
   document.getElementById('sel-tools').classList.toggle('show', !!S.sel);
   document.getElementById('rotBtn').style.display = (S.sel&&S.sel.kind==='part')?'':'none';
-  document.getElementById('flipBtn').style.display = (S.sel&&S.sel.kind==='part')?'':'none';
+  document.getElementById('flipBtn').style.display = (S.sel&&S.sel.kind==='part'&&['led','battery','motor'].includes((partById(S.sel.id)||{}).type))?'':'none';
   updateStatus(sim);
   updateSound(sim);
 }
@@ -376,12 +377,13 @@ function partSVG(p,sim){
   const dir  = sim && sim.motorDir[p.id];
   let body='';
   switch(p.type){
-    case 'battery':
-      body=`<line class="lead" x1="${-L}" y1="0" x2="-12" y2="0"/><line class="lead" x1="14" y1="0" x2="${L}" y2="0"/>
-        <line class="body" x1="-12" y1="-16" x2="-12" y2="16"/><line x1="-4" y1="-8" x2="-4" y2="8" stroke="#1F2937" stroke-width="6"/>
-        <line class="body" x1="6" y1="-16" x2="6" y2="16"/><line x1="14" y1="-8" x2="14" y2="8" stroke="#1F2937" stroke-width="6"/>
-        <text class="lbl b" x="-22" y="-20" style="fill:#D32F2F;font-size:15px">+</text><text class="lbl b" x="24" y="-20" style="font-size:15px">−</text>
-        <text class="lbl b" y="34">건전지</text>`; break;
+    case 'battery':{
+      const f = p.flip ? -1 : 1;
+      body=`<line class="lead" x1="${-L}" y1="0" x2="${-12*f}" y2="0"/><line class="lead" x1="${14*f}" y1="0" x2="${L}" y2="0"/>
+        <line class="body" x1="${-12*f}" y1="-16" x2="${-12*f}" y2="16"/><line x1="${-4*f}" y1="-8" x2="${-4*f}" y2="8" stroke="#1F2937" stroke-width="6"/>
+        <line class="body" x1="${6*f}" y1="-16" x2="${6*f}" y2="16"/><line x1="${14*f}" y1="-8" x2="${14*f}" y2="8" stroke="#1F2937" stroke-width="6"/>
+        <text class="lbl b" x="${-22*f}" y="-20" style="fill:#D32F2F;font-size:15px">+</text><text class="lbl b" x="${24*f}" y="-20" style="font-size:15px">−</text>
+        <text class="lbl b" y="34">건전지</text>`; break; }
     case 'sw':
       body=`<line class="lead" x1="${-L}" y1="0" x2="-16" y2="0"/><line class="lead" x1="16" y1="0" x2="${L}" y2="0"/>
         <circle cx="-16" cy="0" r="3.5" fill="#1F2937"/><circle cx="16" cy="0" r="3.5" fill="#1F2937"/>
@@ -403,13 +405,14 @@ function partSVG(p,sim){
         <text class="lbl b" y="30">저항</text>`; break;
     case 'led':{
       const col = lit ? '#FF5252' : '#E57373';
+      const f = p.flip ? -1 : 1;   // 뒤집기: 기호를 좌우 대칭으로 그린다
       body=`${lit?`<circle class="glow" cx="0" cy="0" r="22"/>`:''}
-        <line class="lead" x1="${-L}" y1="0" x2="-12" y2="0"/><line class="lead" x1="12" y1="0" x2="${L}" y2="0"/>
-        <polygon points="-12,-13 -12,13 10,0" fill="${col}" stroke="#1F2937" stroke-width="2"/>
-        <line x1="10" y1="-13" x2="10" y2="13" stroke="#1F2937" stroke-width="3.5"/>
-        ${lit?`<line class="ray" x1="2" y1="-18" x2="10" y2="-28"/><line class="ray" x1="10" y1="-18" x2="18" y2="-28"/>`:''}
+        <line class="lead" x1="${-L}" y1="0" x2="${-12*f}" y2="0"/><line class="lead" x1="${12*f}" y1="0" x2="${L}" y2="0"/>
+        <polygon points="${-12*f},-13 ${-12*f},13 ${10*f},0" fill="${col}" stroke="#1F2937" stroke-width="2"/>
+        <line x1="${10*f}" y1="-13" x2="${10*f}" y2="13" stroke="#1F2937" stroke-width="3.5"/>
+        ${lit?`<line class="ray" x1="${2*f}" y1="-18" x2="${10*f}" y2="-28"/><line class="ray" x1="${10*f}" y1="-18" x2="${18*f}" y2="-28"/>`:''}
         ${noRes?`<text class="warnmark" x="0" y="-32">⚠️</text>`:''}
-        <text class="lbl b" x="-24" y="-18" style="fill:#D32F2F">+</text><text class="lbl b" x="24" y="-18">−</text>
+        <text class="lbl b" x="${-24*f}" y="-18" style="fill:#D32F2F">+</text><text class="lbl b" x="${24*f}" y="-18">−</text>
         <text class="lbl b" y="32">LED</text>`; break; }
     case 'motor':
       body=`<line class="lead" x1="${-L}" y1="0" x2="-20" y2="0"/><line class="lead" x1="20" y1="0" x2="${L}" y2="0"/>
@@ -532,8 +535,10 @@ document.getElementById('delBtn').onclick=()=>{
   S.sel=null; render();
 };
 document.getElementById('rotBtn').onclick=()=>{ if(S.sel&&S.sel.kind==='part'){ const p=partById(S.sel.id); const s=S.slots.find(s=>s.partId===p.id); if(s){ detachSlot(s);} p.rot=(p.rot+90)%360; if(s) attachSlot(s,p); render(); } };
-document.getElementById('flipBtn').onclick=()=>{ if(!(S.sel&&S.sel.kind==='part')) return; const pid=S.sel.id, a=`p${pid}:0`, b=`p${pid}:1`;
-  S.wires.forEach(w=>{ if(w.a===a) w.a=b; else if(w.a===b) w.a=a; if(w.b===a) w.b=b; else if(w.b===b) w.b=a; }); render(); };
+document.getElementById('flipBtn').onclick=()=>{ if(!(S.sel&&S.sel.kind==='part')) return;
+  const p=partById(S.sel.id); if(!p) return;
+  p.flip=!p.flip;              // 기호가 좌우로 뒤집히고 ＋−(극성)도 반대가 된다
+  render(); };
 document.getElementById('clearWiresBtn').onclick=()=>{ S.wires=[]; S.slots.forEach(s=>s.partId=null); S.sel=null;S.pend=null; render(); };
 document.getElementById('runBtn').onclick=()=>{ unlockAudio(); running=!running; const b=document.getElementById('runBtn'); b.textContent=running?'■ 정지':'▶ 전류 보기'; b.classList.toggle('on',running); render(); };
 document.getElementById('resetBtn').onclick=()=>{ loadMode(S.mode); };
@@ -567,14 +572,27 @@ const TASKS={
       scenarios:[{set:{mag:false}, expect:{led:false}},{set:{mag:true}, expect:{led:true}, needRes:'led'}],
       ok:'정답! 자기 센서가 닫히면 건전지 ＋ → 자기 센서 → 저항 → LED → − 로 전류가 흘러 LED가 켜집니다. 학습지 예제 3의 빈칸을 채워 보세요.'}); } },
   w14:{ title:'학습지 1 · 예제 4  고장 난 회로 수리', html:`<div class="goal">복도 조명: 스위치를 켜면 LED가 켜져야 하는데, 이 회로는 작동하지 않고 위험하기까지 합니다. <b>잘못된 곳 3군데</b>를 찾아 고치세요.</div><ol><li>부품·전선을 눌러 선택 → 🗑 삭제 / ⇄ 뒤집기 활용</li><li>부품판에서 빠진 부품을 추가</li><li>고칠 때마다 <b>정답 확인</b>을 눌러 힌트 받기</li><li>다 고치면 ▶ 전류 보기로 스위치를 켜 보기</li></ol>`,
-    build(){ const bat=addPart('battery',500,480,0), sw=addPart('sw',230,150,0), led=addPart('led',720,150,0);
+    build(){ const bat=addPart('battery',500,480,0), sw=addPart('sw',230,150,0), led=addPart('led',720,150,0,{flip:true});
       addWire(`p${bat.id}:0`,`p${sw.id}:0`);
-      addWire(`p${sw.id}:1`,`p${led.id}:1`);
-      addWire(`p${led.id}:0`,`p${bat.id}:1`);
+      addWire(`p${sw.id}:1`,`p${led.id}:0`);
+      addWire(`p${led.id}:1`,`p${bat.id}:1`);
       addWire(`p${sw.id}:1`,`p${bat.id}:1`); },
-    check(){ return checkSpec({required:['battery','sw','res','led'],
-      scenarios:[{set:{sw:false}, expect:{led:false}},{set:{sw:true}, expect:{led:true}, needRes:'led'}],
-      ok:'수리 완료! 세 가지 오류(지름길 전선 = 합선 · LED 역방향 · 저항 없음)를 모두 고쳤습니다. 학습지 예제 4에 오류와 고친 방법을 쓰세요.'}); } },
+    check(){
+      const sw=S.parts.find(p=>p.type==='sw'), led=S.parts.find(p=>p.type==='led');
+      if(!led) return {ok:false,msg:'LED가 없습니다. 초기화를 눌러 처음 회로로 되돌려 보세요.'};
+      if(!sw)  return {ok:false,msg:'스위치가 없습니다. 초기화를 눌러 처음 회로로 되돌려 보세요.'};
+      const was=sw.closed; sw.closed=true; const r=simulate(); sw.closed=was;
+      // ① 합선(지름길 전선)부터 — 가장 위험한 오류
+      if(r.short) return {ok:false,msg:'① 아직 합선입니다. 부품을 거치지 않고 건전지 ＋와 −를 바로 잇는 \u201C지름길 전선\u201D이 있습니다. 그 전선을 눌러 🗑 삭제하세요.'};
+      // ② 저항
+      if(!S.parts.some(p=>p.type==='res')) return {ok:false,msg:'② 저항이 없습니다. LED에 전류가 너무 세게 흘러 고장납니다. 부품판에서 저항을 추가해 LED와 한 줄로 이으세요.'};
+      if(r.noRes.has(led.id)) return {ok:false,msg:'② 저항이 LED와 같은 줄에 있지 않습니다. 전류가 저항을 지나 LED로 흐르도록 이어 주세요.'};
+      // ③ LED 방향
+      if(!r.lit.has(led.id)) return {ok:false,msg:'③ LED가 거꾸로 끼워져 있습니다. 전류는 ＋에서 −로만 흐릅니다. LED를 눌러 ⇄ 뒤집기를 하세요.'};
+      // 스위치를 열면 꺼져야 정상
+      sw.closed=false; const r2=simulate(); sw.closed=was;
+      if(r2.lit.has(led.id)) return {ok:false,msg:'스위치를 열어도 LED가 켜집니다. 스위치를 거치지 않는 전선이 남아 있는지 확인하세요.'};
+      return {ok:true,msg:'수리 완료! 세 가지 오류(지름길 전선 = 합선 · 저항 없음 · LED 역방향)를 모두 고쳤습니다. 학습지 예제 4에 오류와 고친 방법을 쓰세요.'}; } },
   w21:{ title:'학습지 2 · 예제 1  직렬과 병렬 비교', html:`<div class="goal">왼쪽은 직렬, 오른쪽은 병렬 회로입니다. 스위치를 열고 닫으며 무엇이 꺼지는지 관찰하세요.</div><ol><li>▶ 전류 보기</li><li>직렬: S를 열면 LED·부저가 어떻게 되나?</li><li>병렬: S1만 열면? S2만 열면?</li><li>관찰 결과를 학습지 예제 1에 쓰기</li></ol>`,
     build(){
       const b1=addPart('battery',250,470,0), s1=addPart('sw',110,140,0), l1=addPart('led',250,140,0), z1=addPart('buzz',390,140,0);
