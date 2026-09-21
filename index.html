@@ -89,11 +89,16 @@
 
   @media (prefers-reduced-motion:reduce){.flow,.spin-cw,.spin-ccw,.snd{animation:none}}
   @media (max-width:900px){
-    #app{grid-template-rows:56px 84px 1fr 220px;grid-template-columns:1fr;grid-template-areas:"top" "pal" "cv" "side"}
+    #app{grid-template-rows:56px 84px 1fr 190px;grid-template-columns:1fr;grid-template-areas:"top" "pal" "cv" "side"}
     aside.pal{flex-direction:row;border-right:0;border-bottom:1px solid var(--line);padding:6px 8px}
     .pi{min-width:78px}
     aside.side{border-left:0;border-top:1px solid var(--line)}
     header h1 small{display:none}
+    header{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    header h1,.tabs,.tab,.btn{flex:0 0 auto}
+    .tab{padding:7px 9px;font-size:13px}
+    .btn{padding:7px 10px;font-size:13px}
+    .btn.run{min-width:92px}
   }
   #help{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;z-index:9}
   #help.show{display:flex}
@@ -119,6 +124,7 @@
     <div class="spacer"></div>
     <button class="btn" id="helpBtn">사용법</button>
     <button class="btn" id="resetBtn">초기화</button>
+    <button class="btn" id="fitBtn" title="화면에 맞추기">⤢ 전체</button>
     <button class="btn run" id="runBtn">▶ 전류 보기</button>
   </header>
 
@@ -154,7 +160,7 @@
     <li><b>부품 추가</b> — 왼쪽 목록의 부품을 누르면 화면에 나타납니다. 끌어서 옮길 수 있습니다.</li>
     <li><b>전선 연결</b> — 부품 끝의 단자 ○를 한 번 누르고, 이을 다른 단자를 누르면 전선이 생깁니다.</li>
     <li><b>스위치·센서 조작</b> — 스위치, 자기 센서, 기울기 센서의 몸통을 누르면 열리고 닫힙니다. 센서는 조건(자석이 가까움·기울어짐)이 되면 스스로 닫히는 스위치입니다.</li>
-    <li><b>선택·회전·뒤집기·삭제</b> — 부품이나 전선을 누르면 선택됩니다. 위쪽 버튼으로 회전(모양만 돌림)·삭제할 수 있습니다. LED와 건전지를 선택하면 <b>⇄ 뒤집기</b>가 나타나 기호가 좌우로 뒤집히고 ＋−(극성)도 반대가 됩니다.</li>
+    <li><b>선택·회전·뒤집기·삭제</b> — 부품이나 전선을 누르면 선택됩니다. 위쪽 버튼으로 회전(모양만 돌림)·삭제할 수 있습니다. 빈 곳을 끌면 화면이 움직이고, 두 손가락으로 벌리면 확대됩니다(⤢ 전체 버튼으로 원래대로). LED와 건전지를 선택하면 <b>⇄ 뒤집기</b>가 나타나 기호가 좌우로 뒤집히고 ＋−(극성)도 반대가 됩니다.</li>
     <li><b>전류 보기</b> — ▶ 버튼을 누르면 회로가 완성된 곳에 전류가 흐르는 모습이 보입니다. LED 방향(＋ → −)과 저항을 확인하세요.</li>
   </ul>
   <button class="btn" onclick="document.getElementById('help').classList.remove('show')">닫기</button>
@@ -212,12 +218,11 @@ function termsOf(p){ return [`p${p.id}:0`,`p${p.id}:1`]; }
 /* 단자 그래프: 전선(무방향) + 부품 내부 간선(LED는 +→− 방향, 열린 스위치는 없음) */
 function simulate(){
   const R={live:new Set(), lit:new Set(), motorDir:{}, liveTerms:new Set(), level:new Map(), warn:[], short:false, noRes:new Set()};
-  const bat=S.parts.find(p=>p.type==='battery');
-  if(!bat){ return R; }
+  const bats=S.parts.filter(p=>p.type==='battery');
+  if(!bats.length){ return R; }
   const adjW=new Map(); // 전선 인접
   const link=(a,b)=>{ if(!adjW.has(a))adjW.set(a,[]); adjW.get(a).push(b); };
   S.wires.forEach(w=>{link(w.a,w.b);link(w.b,w.a);});
-  const src=bat.flip?`p${bat.id}:1`:`p${bat.id}:0`, sink=bat.flip?`p${bat.id}:0`:`p${bat.id}:1`;
   function buildInner(ignoreLedDir){
     const inner=new Map();
     S.parts.forEach(p=>{
@@ -232,7 +237,7 @@ function simulate(){
     });
     return inner;
   }
-  function enumerate(inner){
+  function enumerate(inner, src, sink){
     const paths=[]; const MAXP=300;
     function dfs(t, visited, comps, terms){
       if(paths.length>=MAXP) return;
@@ -250,46 +255,51 @@ function simulate(){
     dfs(src,new Set([src]),[],[src]);
     return paths;
   }
-  const inner=buildInner(false);
-  const paths=enumerate(inner);
-  if(!paths.length){
-    // 역방향 LED 감지: LED 방향을 무시하면 경로가 생기는지
-    const undirected=enumerate(buildInner(true));
-    undirected.forEach(pa=>pa.comps.filter(c=>c.part.type==='led'&&c.dir<0).forEach(()=>{ if(!R.warn.length) R.warn.push('LED가 켜지지 않습니다. LED는 ＋에서 −로만 전류가 흐릅니다. LED를 선택하고 ⇄ 뒤집기로 방향을 바꿔 보세요.'); }));
-    return R;
-  }
+  const inner=buildInner(false), innerU=buildInner(true);
   const isLoad=p=>['res','led','motor','buzz'].includes(p.type);
-  // 합선 검사
-  if(paths.some(pa=>!pa.comps.some(c=>isLoad(c.part)))){ R.short=true; R.warn.push('합선! 건전지 ＋에서 −까지 저항 없이 바로 이어졌습니다. 건전지가 뜨거워지고 부품이 작동하지 않습니다.'); return R; }
-  paths.forEach(pa=>{
-    pa.terms.forEach(t=>R.liveTerms.add(t));
-    const hasRes=pa.comps.some(c=>c.part.type==='res');
-    pa.comps.forEach(c=>{
-      R.live.add(c.part.id);
-      if(c.part.type==='motor' && !(c.part.id in R.motorDir)) R.motorDir[c.part.id]=c.dir;
-      if(c.part.type==='led'){ R.lit.add(c.part.id); if(!hasRes) R.noRes.add(c.part.id); }
+  const allPaths=[]; const revIds=new Set();
+  // 건전지마다 각각의 회로를 시뮬레이션해 결과를 합친다 (2-①처럼 건전지가 두 개인 화면 대응)
+  for(const bat of bats){
+    const src=bat.flip?`p${bat.id}:1`:`p${bat.id}:0`, sink=bat.flip?`p${bat.id}:0`:`p${bat.id}:1`;
+    const paths=enumerate(inner, src, sink);
+    if(!paths.length){
+      enumerate(innerU, src, sink).forEach(pa=>pa.comps.forEach(c=>{ if(c.part.type==='led'&&c.dir<0) revIds.add(c.part.id); }));
+      continue;
+    }
+    if(paths.some(pa=>!pa.comps.some(c=>isLoad(c.part)))){
+      R.short=true; R.warn=['합선! 건전지 ＋에서 −까지 저항 없이 바로 이어졌습니다. 건전지가 뜨거워지고 부품이 작동하지 않습니다.'];
+      return R;
+    }
+    paths.forEach(pa=>{
+      pa.terms.forEach(t=>R.liveTerms.add(t));
+      const hasRes=pa.comps.some(c=>c.part.type==='res');
+      pa.comps.forEach(c=>{
+        R.live.add(c.part.id);
+        if(c.part.type==='motor' && !(c.part.id in R.motorDir)) R.motorDir[c.part.id]=c.dir;
+        if(c.part.type==='led'){ R.lit.add(c.part.id); if(!hasRes) R.noRes.add(c.part.id); }
+      });
     });
-  });
-  // 저항 없는 LED: 모든 경로에 저항이 없을 때만 경고
+    allPaths.push(...paths);
+    // 레벨(BFS) — 전류 방향 표시용 (이 건전지의 ＋에서 출발)
+    if(!R.level.has(src)){
+      const q=[src]; R.level.set(src,0);
+      while(q.length){
+        const t=q.shift(); const lv=R.level.get(t);
+        for(const n of (adjW.get(t)||[])) if(R.liveTerms.has(n)&&!R.level.has(n)){R.level.set(n,lv+1);q.push(n);}
+        for(const e of (inner.get(t)||[])) if(R.live.has(e.part.id)&&R.liveTerms.has(e.to)&&!R.level.has(e.to)){R.level.set(e.to,lv+1);q.push(e.to);}
+      }
+    }
+    enumerate(innerU, src, sink).forEach(pa=>pa.comps.forEach(c=>{ if(c.part.type==='led'&&c.dir<0) revIds.add(c.part.id); }));
+  }
+  // 저항 없는 LED: 이 LED를 지나는 모든 경로에 저항이 없을 때만
   R.noRes.forEach(id=>{
-    const ok=paths.some(pa=>pa.comps.some(c=>c.part.id===id)&&pa.comps.some(c=>c.part.type==='res'));
+    const ok=allPaths.some(pa=>pa.comps.some(c=>c.part.id===id)&&pa.comps.some(c=>c.part.type==='res'));
     if(ok) R.noRes.delete(id);
   });
-  // 레벨(BFS) — 전류 방향 표시용
-  const q=[src]; R.level.set(src,0);
-  while(q.length){
-    const t=q.shift(); const lv=R.level.get(t);
-    for(const n of (adjW.get(t)||[])) if(R.liveTerms.has(n)&&!R.level.has(n)){R.level.set(n,lv+1);q.push(n);}
-    for(const e of (inner.get(t)||[])) if(R.live.has(e.part.id)&&R.liveTerms.has(e.to)&&!R.level.has(e.to)){R.level.set(e.to,lv+1);q.push(e.to);}
-  }
-  // 방향이 잘못된 LED 경고: 방향 무시 시에만 경로가 생기는 LED
-  {
-    const und=enumerate(buildInner(true));
-    const revIds=new Set();
-    und.forEach(pa=>pa.comps.forEach(c=>{ if(c.part.type==='led'&&c.dir<0&&!R.lit.has(c.part.id)) revIds.add(c.part.id); }));
-    if(revIds.size) R.warn.push('켜지지 않는 LED가 있습니다. LED는 ＋에서 −로만 전류가 흐릅니다. LED를 선택하고 ⇄ 뒤집기로 방향을 바꿔 보세요.');
-  }
-  R.noRes.forEach(()=>R.warn.push('저항 없이 LED에 전류가 흐릅니다. 큰 전류로 LED가 망가질 수 있어요. 저항을 직렬로 넣으세요.'));
+  if(TASKS[S.mode]&&TASKS[S.mode].noResOk) R.noRes.clear();   // 비교 관찰용 화면은 저항 경고 생략
+  if([...revIds].some(id=>!R.lit.has(id)))
+    R.warn.push('켜지지 않는 LED가 있습니다. LED는 ＋에서 −로만 전류가 흐릅니다. LED를 선택하고 ⇄ 뒤집기로 방향을 바꿔 보세요.');
+  if(R.noRes.size) R.warn.push('저항 없이 LED에 전류가 흐릅니다. 큰 전류로 LED가 망가질 수 있어요. 저항을 직렬로 넣으세요.');
   return R;
 }
 
@@ -477,11 +487,62 @@ function updateSound(sim){
 
 /* ==================== 입력 ==================== */
 function svgPt(e){ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; return pt.matrixTransform(svg.getScreenCTM().inverse()); }
+
+/* ==== 화면 이동·확대 (모바일 팬/핀치줌) ==== */
+const VB={x:0,y:0,w:1000,h:620};
+function applyVB(){ svg.setAttribute('viewBox', VB.x+' '+VB.y+' '+VB.w+' '+VB.h); }
+function fitView(){ VB.x=0;VB.y=0;VB.w=1000;VB.h=620; applyVB(); }
+document.getElementById('fitBtn').onclick=fitView;
+function clampVB(){
+  VB.w=Math.max(250, Math.min(1400, VB.w)); VB.h=VB.w*0.62;
+  VB.x=Math.max(-200, Math.min(1200-VB.w, VB.x));
+  VB.y=Math.max(-160, Math.min(780-VB.h, VB.y));
+}
+function viewScale(){ const r=svg.getBoundingClientRect(); return Math.min(r.width/VB.w, r.height/VB.h)||1; }
+const ptrs=new Map(); let pan=null, pinch=null;
+svg.addEventListener('pointerdown',e=>{ ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===2){ // 두 손가락: 핀치줌 시작 (부품 드래그 취소)
+    drag=null;
+    const [a,b]=[...ptrs.values()];
+    pinch={d0:Math.hypot(a.x-b.x,a.y-b.y)||1, vb:{...VB},
+           c:svgPt({clientX:(a.x+b.x)/2, clientY:(a.y+b.y)/2})};
+    pan=null;
+  }
+},true);
+svg.addEventListener('pointermove',e=>{ if(ptrs.has(e.pointerId)) ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch && ptrs.size>=2){
+    const [a,b]=[...ptrs.values()];
+    const d=Math.hypot(a.x-b.x,a.y-b.y)||1, k=pinch.d0/d;
+    const nw=pinch.vb.w*k;
+    VB.w=nw; VB.h=nw*0.62;
+    VB.x=pinch.c.x-(pinch.c.x-pinch.vb.x)*(VB.w/pinch.vb.w);
+    VB.y=pinch.c.y-(pinch.c.y-pinch.vb.y)*(VB.h/pinch.vb.h);
+    clampVB(); applyVB(); e.preventDefault();
+  } else if(pan){
+    const k=viewScale();
+    VB.x=pan.vx-(e.clientX-pan.sx)/k; VB.y=pan.vy-(e.clientY-pan.sy)/k;
+    if(Math.hypot(e.clientX-pan.sx,e.clientY-pan.sy)>8) pan.moved=true;
+    clampVB(); applyVB();
+  }
+},true);
+function ptrEnd(e){ ptrs.delete(e.pointerId);
+  if(ptrs.size<2) pinch=null;
+  if(pan && pan.id===e.pointerId){ const moved=pan.moved; pan=null;
+    if(!moved){ S.sel=null; S.pend=null; render(); } }
+}
+svg.addEventListener('pointerup',ptrEnd,true); svg.addEventListener('pointercancel',ptrEnd,true);
+/* 데스크톱: 휠로 확대·축소 */
+svg.addEventListener('wheel',e=>{ e.preventDefault();
+  const c=svgPt(e), k=(e.deltaY>0?1.12:1/1.12), w0=VB.w;
+  VB.w=w0*k; VB.h=VB.w*0.62;
+  VB.x=c.x-(c.x-VB.x)*(VB.w/w0); VB.y=c.y-(c.y-VB.y)*(VB.h/(w0*0.62));
+  clampVB(); applyVB();
+},{passive:false});
 let drag=null;
 svg.addEventListener('pointerdown',e=>{
   unlockAudio();
   const el=e.target.closest('[data-role]'); const pt=svgPt(e);
-  if(!el){ S.sel=null; S.pend=null; render(); return; }
+  if(!el){ if(ptrs.size===1){ pan={id:e.pointerId, vx:VB.x, vy:VB.y, sx:e.clientX, sy:e.clientY, moved:false}; svg.setPointerCapture(e.pointerId); } return; }
   const role=el.dataset.role, id=el.dataset.id;
   if(role==='term'){
     if(S.pend==null){ S.pend=id; }
@@ -593,7 +654,7 @@ const TASKS={
       sw.closed=false; const r2=simulate(); sw.closed=was;
       if(r2.lit.has(led.id)) return {ok:false,msg:'스위치를 열어도 LED가 켜집니다. 스위치를 거치지 않는 전선이 남아 있는지 확인하세요.'};
       return {ok:true,msg:'수리 완료! 세 가지 오류(지름길 전선 = 합선 · 저항 없음 · LED 역방향)를 모두 고쳤습니다. 학습지 예제 4에 오류와 고친 방법을 쓰세요.'}; } },
-  w21:{ title:'학습지 2 · 예제 1  직렬과 병렬 비교', html:`<div class="goal">왼쪽은 직렬, 오른쪽은 병렬 회로입니다. 스위치를 열고 닫으며 무엇이 꺼지는지 관찰하세요.</div><ol><li>▶ 전류 보기</li><li>직렬: S를 열면 LED·부저가 어떻게 되나?</li><li>병렬: S1만 열면? S2만 열면?</li><li>관찰 결과를 학습지 예제 1에 쓰기</li></ol>`,
+  w21:{ title:'학습지 2 · 예제 1  직렬과 병렬 비교', noResOk:true, html:`<div class="goal">왼쪽은 직렬, 오른쪽은 병렬 회로입니다. 스위치를 열고 닫으며 무엇이 꺼지는지 관찰하세요.</div><ol><li>▶ 전류 보기</li><li>직렬: S를 열면 LED·부저가 어떻게 되나?</li><li>병렬: S1만 열면? S2만 열면?</li><li>관찰 결과를 학습지 예제 1에 쓰기</li></ol>`,
     build(){
       const b1=addPart('battery',250,470,0), s1=addPart('sw',110,140,0), l1=addPart('led',250,140,0), z1=addPart('buzz',390,140,0);
       addWire(`p${b1.id}:0`,`p${s1.id}:0`); addWire(`p${s1.id}:1`,`p${l1.id}:0`); addWire(`p${l1.id}:1`,`p${z1.id}:0`); addWire(`p${z1.id}:1`,`p${b1.id}:1`);
